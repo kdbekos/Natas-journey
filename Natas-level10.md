@@ -20,3 +20,16 @@ The structure of the command is:
 grep -i [USER_INPUT] dictionary.txt
 
 By including a space in our input, we can trick grep into treating our input as both a pattern and an additional file path.
+
+4. Solution
+I provided the following payload in the search field:
+" . /etc/natas_webpass/natas11"
+
+The resulting system execution:
+grep -i . /etc/natas_webpass/natas11 dictionary.txt
+
+5. Conclusion & Prevention
+This challenge demonstrates that blacklisting is not an effective security measure. It is often possible to achieve the same malicious goal using permitted characters.
+
+Remediation:
+Avoid using shell-executing functions like passthru() or system() whenever a native language API is available.
