@@ -284,13 +284,10 @@ admin=1
 
 ## 🎯 Key Takeaways
 
-- **Always inspect the source code** before attempting random payloads
-- **Never blindly inject user input into session variables** — this grants attackers complete control over session state
 - **Whitelist allowed session keys** instead of accepting any parameter
 - **A whitelist is only useful if it is actually used for validation** — the `$validkeys` array was defined but not checked
 - **PHPSESSID determines which PHP session is loaded**
 - **When multiple applications share session storage**, vulnerabilities in one application can potentially affect another
-- **The objective was not to bypass a password directly** — it was to manipulate the server-side session state so that the authorization check passed
 - **User-controlled request parameters should not be copied directly into session data**
 
 ---
