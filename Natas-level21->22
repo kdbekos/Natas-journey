@@ -1,21 +1,31 @@
-Natas 21 → 22 — OverTheWire
+# Natas Level 21 → 22: Session Manipulation Vulnerability
 
-Objective
+## Objective
 
-The goal of this level is to log in as an administrator and retrieve the credentials for Natas 22.
+Log in as an administrator to retrieve the credentials for Natas 22.
 
-The page initially reports:
+## Initial Observation
 
+The main page displays:
+
+```
 You are logged in as a regular user.
+```
 
-The level also provides an important hint:
+To proceed, we need to escalate our privileges to admin status.
 
-This website is colocated with natas21-experimenter.
+**Key Hint:** *This website is colocated with natas21-experimenter.*
 
-The main Natas 21 page contains:
+---
 
+## Vulnerability Analysis
+
+### Main Application Logic
+
+The authentication mechanism is straightforward:
+
+```php
 <?php
-
 function print_credentials() {
     if($_SESSION and array_key_exists("admin", $_SESSION) and $_SESSION["admin"] == 1) {
         print "You are an admin. The credentials for the next level are:<br>";
@@ -28,23 +38,18 @@ function print_credentials() {
 
 session_start();
 print_credentials();
-
 ?>
+```
 
-The important part is:
+**Critical Requirement:** The session variable `$_SESSION["admin"]` must equal `1`.
 
-$_SESSION["admin"] == 1
+Since there is no legitimate way to set this on the main page, the experimenter application holds the key.
 
-Therefore, the objective is to get the server to load a session containing:
+### The Experimenter: Session Injection Vulnerability
 
-admin = 1
+The experimenter contains the following vulnerable code:
 
-There is no functionality on this page that actually sets the admin session variable, so I investigated the experimenter application.
-
-2. Inspecting the Experimenter
-
-The experimenter contains the following logic:
-
+```php
 session_start();
 
 if(array_key_exists("submit", $_REQUEST)) {
@@ -52,17 +57,54 @@ if(array_key_exists("submit", $_REQUEST)) {
         $_SESSION[$key] = $val;
     }
 }
+```
 
-This is the vulnerable section.
+**The Flaw:** Every request parameter is directly injected into the session without validation or sanitization.
 
-The application iterates through every parameter supplied in the request and copies it directly into the session.
+---
 
-For example, sending:
+## Exploitation
 
-admin=1
+### Attack Method
 
-causes:
+Since both applications share the same session (they are colocated), we can exploit the experimenter to inject an admin session variable.
 
+**Steps:**
+
+1. Send a request to the experimenter with the following parameters:
+   - `submit=1` (triggers the vulnerable foreach loop)
+   - `admin=1` (injected into the session)
+
+2. Access the main Natas 21 page, which will now read the manipulated session
+
+3. The condition `$_SESSION["admin"] == 1` evaluates to true, granting admin access
+
+### Proof of Concept
+
+A simple GET request to the experimenter:
+
+```
+GET /index.php?submit=1&admin=1
+```
+
+This causes the experimenter to execute:
+
+```php
 $_SESSION["admin"] = "1";
+```
 
-The submit parameter is also important because it causes the vulnerable foreach loop to execute.
+When the main page loads the session, the credentials are revealed.
+
+---
+
+## Key Takeaway
+
+This vulnerability demonstrates the dangers of:
+- **Direct user input into session data** without validation
+- **Lack of input sanitization** on session variables
+- **Insufficient session integrity checks**
+
+Proper mitigation would involve:
+- Whitelisting allowed session keys
+- Validating and sanitizing all inputs
+- Using secure session handling mechanisms
