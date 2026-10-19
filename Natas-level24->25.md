@@ -1,10 +1,18 @@
 # Natas 24 → 25 — OverTheWire Write-up
 
-## Objective
-Bypass the password verification mechanism on the Natas 24 challenge and retrieve the credentials for the next level (natas25).
+---
 
-1) Source code analysis
-Relevant snippet (simplified):
+## TL;DR
+Bypass a fragile authentication check by sending the `passwd` parameter as an *array* (using PHP's `name[]` bracket syntax). On the PHP version used by the challenge, `strcmp(array, string)` returns `NULL` and the code `!strcmp(...)` evaluates to true, revealing the credentials for `natas25`.
+
+---
+
+## Objective
+Retrieve the credentials for the next level (natas25) by bypassing the password verification mechanism on the Natas 24 challenge.
+
+---
+
+## 1) Source code (relevant snippet)
 
 ```php
 if (array_key_exists("passwd", $_REQUEST)) {
@@ -16,37 +24,61 @@ if (array_key_exists("passwd", $_REQUEST)) {
     }
 }
 ```
-The application uses strcmp() to compare the user-supplied passwd value with the expected password, and negates the return value using ! so the condition is intended to pass only when strcmp() returns 0 (strings are equal).
 
-2) Identifying the vulnerability
-The check assumes $_REQUEST['passwd'] is a string, but the application does not validate its type. PHP supports sending HTTP parameters as arrays using bracket syntax (for example ?passwd[]=test). When that happens, PHP populates $_REQUEST['passwd'] as an array instead of a string.
+The application uses `strcmp()` to compare the user-supplied `passwd` value with the expected password, and negates the return value with `!`. The intent is to run the protected branch only when `strcmp()` returns `0` (strings are equal).
 
-Calling strcmp() with an array where a string is expected leads to different behavior depending on the PHP runtime:
+---
 
-On some older PHP versions used by the challenge, strcmp(array, string) emits a warning and returns NULL.
-The ! operator converts NULL to true, so !strcmp($_REQUEST['passwd'], $expected) evaluates to true and the authentication check is bypassed.
-In PHP 8+, passing an array into functions expecting strings will often throw a TypeError, so exploitability depends on the PHP version used by the target.
+## 2) Why this is vulnerable
+- The code assumes `$_REQUEST['passwd']` is a string but never validates its type.
+- PHP allows parameters to be sent as arrays using bracket syntax (e.g. `?passwd[]=value`). When that happens, `$_REQUEST['passwd']` becomes an array.
+- Passing an array to `strcmp()` (which expects strings) produces runtime-dependent behavior:
+  - On older PHP runtimes used by the challenge, `strcmp(array, string)` emits a warning and returns `NULL`.
+  - `!NULL` evaluates to `true`, so the authentication check is bypassed.
+  - On modern PHP (PHP 8+), passing an array where a string is expected typically throws a `TypeError`, so exploitability depends on the server's PHP version.
 
-3) Exploitation
-Trigger the vulnerability by sending passwd as an array. Example requests:
+This is a type-handling / input-validation bug combined with unsafe negation of a function return value.
 
-Normal (fails):
+---
+
+## 3) Exploitation (reproduction)
+Trigger the vulnerability by sending `passwd` as an array.
+
+Examples:
+
+Normal (expected, fails):
+
+```
 GET /?passwd=test HTTP/1.1
-Exploit (bypasses check on vulnerable runtimes):
+```
+
+Exploit (bypasses the check on vulnerable runtimes):
+
+```
 GET /?passwd[]=test HTTP/1.1
-Or in the browser address bar:
+```
 
+Or paste in the browser address bar:
+
+```
 http://natas24.natas.labs.overthewire.org/?passwd[]=test
+```
 
-When the server receives passwd as an array, the vulnerable strcmp() call returns NULL (on the challenge PHP version) and !NULL evaluates to true, causing the application to reveal the credentials for natas25.
+What happens: the server receives `passwd` as an array; `strcmp()` returns `NULL` on the vulnerable PHP version; `!NULL` is `true`, and the page prints the credentials for `natas25`.
 
-4) Root cause
-Missing input validation: the application accepts user input without verifying it is of the expected type.
-Unsafe use of strcmp() combined with logical negation: negating the result (!strcmp(...)) assumes the function always returns an integer comparison result, but other return values (like NULL) can alter control flow.
-Reliance on PHP semantics that vary across versions — the behavior that enables the exploit is not guaranteed across all PHP versions.
+---
 
-5) Remediation
-Validate input types and use strict checks. Example safe approach:
+## 4) Root cause
+- Missing input validation: the code accepts user input without verifying it is the expected type (string).
+- Unsafe idiom: negating the return of `strcmp()` (`!strcmp(...)`) masks non-integer return values and can turn warnings or errors into truthy values.
+- Reliance on PHP semantics that vary across versions — behavior that allows the bypass is not guaranteed across all PHP releases.
+
+---
+
+## 5) Remediation
+Always validate and sanitize input prior to use. Prefer explicit, strict checks instead of relying on coercion.
+
+Example secure check:
 
 ```php
 if (
@@ -57,22 +89,34 @@ if (
     // grant access
 }
 ```
-Better yet, use secure password handling primitives (hashing + password_verify()), fail closed on malformed input, and avoid relying on coercing function return values with !.
 
-6) Key takeaways
-HTTP parameters can be supplied as arrays using PHP's bracket syntax (e.g. name[]=value).
-Always validate user-controlled input before passing it to functions that expect a specific type.
-Negating function results (e.g. !strcmp(...)) can mask errors and lead to logic bypasses when functions return unexpected values.
-PHP behavior can change between versions — when designing security-sensitive checks, ensure behavior is well-defined and robust across runtimes.
-Authentication checks should fail securely (deny access) on malformed input.
+Better practices:
+- Use `password_hash()` / `password_verify()` for password handling.
+- Fail closed: deny access on malformed input rather than attempting to coerce or ignore it.
+- Avoid negating function return values (e.g. `!strcmp(...)`); use explicit comparison (`=== 0`).
 
-Vulnerability classification
+---
+
+## 6) Key takeaways
+- PHP HTTP parameters may be supplied as arrays using bracket syntax (e.g. `name[]=value`).
+- Validate user-controlled input types before passing them to functions that expect specific types.
+- Negating function results (like `!strcmp(...)`) can mask errors and lead to logic bypasses when function returns are unexpected.
+- PHP behavior changes between versions; security checks should be robust across runtimes.
+- Authentication checks should fail securely on malformed input.
+
+---
+
+## Vulnerability classification
 Improper Input Validation / Type Confusion
 
-Tools used
-Browser
-(Optional) Burp Suite for inspecting and modifying requests
-PHP source-code analysis
+---
 
-Lab
+## Tools used
+- Browser
+- (Optional) Burp Suite for request inspection / modification
+- PHP source-code analysis
+
+---
+
+## Lab
 OverTheWire — Natas 24 → 25
