@@ -2,11 +2,6 @@
 
 ---
 
-## TL;DR
-Bypass a fragile authentication check by sending the `passwd` parameter as an *array* (using PHP's `name[]` bracket syntax). On the PHP version used by the challenge, `strcmp(array, string)` returns `NULL` and the code `!strcmp(...)` evaluates to true, revealing the credentials for `natas25`.
-
----
-
 ## Objective
 Retrieve the credentials for the next level (natas25) by bypassing the password verification mechanism on the Natas 24 challenge.
 
